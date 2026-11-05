@@ -1,0 +1,72 @@
+name: OCI con Terraform
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: "Accion que ejecutara Terraform"
+        required: true
+        default: plan
+        type: choice
+        options:
+          - plan
+          - apply
+          - destroy
+
+permissions:
+  contents: read
+
+jobs:
+  OCI-IaC-Deployment:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+        working-directory: Terraform
+    env:
+      TF_IN_AUTOMATION: "true"
+      TF_INPUT: "false"
+      TF_VAR_compartment_id: ${{ secrets.OCI_TENANCY_OCID }}
+      TF_VAR_ssh_authorized_key: ${{ secrets.OCI_SSH_PUBLIC_KEY }}
+      TF_HTTP_ADDRESS: ${{ secrets.OCI_STATE_ADDRESS }}
+      TF_HTTP_UPDATE_METHOD: PUT
+
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
+
+      - name: Instalar Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Crear perfil de OCI
+        run: |
+          install -m 700 -d ~/.oci
+          printf '[DEFAULT]\n' > ~/.oci/config
+          printf 'user=%s\n' '${{ secrets.OCI_USER_OCID }}' >> ~/.oci/config
+          printf 'fingerprint=%s\n' '${{ secrets.OCI_FINGERPRINT }}' >> ~/.oci/config
+          printf 'region=%s\n' '${{ secrets.OCI_REGION }}' >> ~/.oci/config
+          printf 'tenancy=%s\n' '${{ secrets.OCI_TENANCY_OCID }}' >> ~/.oci/config
+          printf 'key_file=%s\n' "$HOME/.oci/key.pem" >> ~/.oci/config
+          printf '%s' '${{ secrets.OCI_KEY_FILE }}' > ~/.oci/key.pem
+          chmod 600 ~/.oci/config ~/.oci/key.pem
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Format
+        run: terraform fmt -check -recursive
+
+      - name: Terraform Validate
+        run: terraform validate
+
+      - name: Terraform Plan
+        run: |
+          if [ '${{ inputs.operation }}' = 'destroy' ]; then
+            terraform plan -destroy -out=tfplan
+          else
+            terraform plan -out=tfplan
+          fi
+
+      - name: Terraform Apply
+        if: inputs.operation == 'apply' || inputs.operation == 'destroy'
+        run: terraform apply -auto-approve tfplan
