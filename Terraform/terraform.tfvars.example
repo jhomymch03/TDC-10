@@ -1,0 +1,3 @@
+# Copia este archivo como terraform.tfvars para ejecutar Terraform localmente.
+compartment_id     = "ocid1.tenancy.oc1..REEMPLAZAR_CON_TU_OCID"
+ssh_authorized_key = "ssh-rsa REEMPLAZAR_CON_TU_CLAVE_PUBLICA"
